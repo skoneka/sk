@@ -1,0 +1,208 @@
+\documentclass[a4paper,11pt,notitlepage]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\selectlanguage{polish}
+\usepackage{graphicx}
+
+\usepackage{geometry}
+
+%\hyphenation{FreeBSD,ppp,PPP}
+
+
+\geometry{verbose,a4paper,tmargin=1cm,bmargin=2cm,lmargin=2cm,rmargin=2cm}
+
+\title{\textbf{Laboratorium sieci komputerowych\\Konfiguracja mostka, protokół ARP, konfiguracja PPP}}
+\author{Artur Skonecki\\Łukasz Załęski\\gr. 3}
+
+
+\usepackage{indentfirst}
+
+\begin{document}
+\maketitle
+%\tableofcontents
+
+\section{Schematy}
+
+\subsection{Schemat nullmodem}
+\begin{verbatim}
+   ____                                           ____
+  |    | tun0 .1      null modem         tun0 .2 |    |
+  | k7 |-----------------------------------------| k8 |
+  |____|              10.17.17.0/32              |____|
+\end{verbatim}
+\subsection{Schemat mostek}
+\begin{verbatim}
+   ____                                           ____
+  |    | wlan0 .1     adhoc K7_K8       wlan0 .2 |    |
+  | k7 |-----------------------------------------| k8 |
+  |____|              10.17.17.0/24              |____|
+  bridge0 -> sk0
+\end{verbatim}
+
+\section{ARP}
+\subsection{Wyświetlenie tablicy ARP}
+Wyświetlamy tablicę arp na k8 za pomocą: arp -n -a
+\begin{verbatim}
+k8% arp -n -a
+? (194.29.146.1) at 00:14:1c:ad:7b:43 on sk0 expires in 1127 seconds [ethernet]
+? (194.29.146.3) at 00:e0:81:65:37:d4 on sk0 expires in 1121 seconds [ethernet]
+\end{verbatim}
+\subsection{Wykasowanie tablicy ARP}
+Aby sprawdzić dalsze zachowanie arp wyczyściliśmy tablicę arp za pomocą 
+polecenia: arp -d -a
+\begin{verbatim}
+k8% sudo arp -d -a
+194.29.146.1 (194.29.146.1) deleted
+194.29.146.3 (194.29.146.3) deleted
+\end{verbatim}
+Teraz ponownie sprawdzamy zawartość tablicy arp:
+\begin{verbatim}
+k8% arp -n -a
+k8% arp -n -a
+? (194.29.146.3) at 00:e0:81:65:37:d4 on sk0 expires in 1195 seconds 
+[ethernet]
+? (194.29.146.188) at 00:11:d8:4a:c5:cc on sk0 permanent [ethernet]
+\end{verbatim}
+\subsection{Nasłuchiwanie zapytań ARP}
+Teraz podglądamy jak wygląda zapytanie arp kierowanie do k8 za pomocą: 
+tcpdump
+\begin{verbatim}
+k8% sudo tcpdump -c 4 -n arp
+listening on sk0, link-type EN10MB (Ethernet), capture size 65535 bytes
+22:24:27.957386 ARP, Request who-has 192.168.2.70 tell 192.168.2.70, 
+length 46
+22:24:28.670615 ARP, Request who-has 192.168.123.118 tell 192.168.146.3, 
+length 46
+\end{verbatim}
+\section{Ustanowienie połączenia  przez kabel RS-232 (null modem) z wykorzystaniem protokołu PPP}
+
+
+Po połączeniu 2 komputerów za pomocą kabla RS-232, wykonaliśmy konfigurację programu ppp poprzez edycję pliku "/etc/ppp/ppp.conf".
+Na maszynie k7 w sekcji \textbf{nullmodem} pliku konfiguarcyjnego:
+
+\begin{verbatim}
+set ifaddr 10.17.17.1 10.17.17.2  255.255.255.255
+\end{verbatim}
+
+Na maszynie k8 w sekcji \textbf{nullmodem} pliku konfiguarcyjnego:
+
+\begin{verbatim}
+set ifaddr 10.17.17.2 10.17.17.1  255.255.255.255
+\end{verbatim}
+
+Następnie uruchomiliśmy ppp.
+
+\begin{verbatim}
+sudo ppp nullmodem
+\end{verbatim}
+
+interfejs tun0 - maszyna k7
+\begin{verbatim}
+tun0: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> metric 0 mtu 1500
+	options=80000<LINKSTATE>
+	inet 10.17.17.1 --> 10.17.17.2 netmask 255.255.255.255
+	Opened by PID 937
+\end{verbatim}
+
+interfejs tun0 - maszyna k8
+
+\begin{verbatim}
+tun0: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> metric 0 mtu 1500
+	options=80000<LINKSTATE>
+	inet 10.17.17.2 --> 10.17.17.1 netmask 255.255.255.255
+	Opened by PID 7681
+\end{verbatim}
+
+Przetestowaliśmy połączenie obustronnie przy użyciu tcpdump i ping.
+
+\begin{verbatim}
+k7% ping -c 1 -S 10.17.17.1 10.17.17.2
+PING 10.17.17.2 (10.17.17.2) from 10.17.17.1: 56 data bytes
+64 bytes from 10.17.17.2: icmp_seq=0 ttl=64 time=8.555 ms
+\end{verbatim}
+\begin{verbatim}
+k8% sudo tcpdump -i tun0
+listening on tun0, link-type NULL (BSD loopback), capture size 65535 bytes
+13:05:22.313695 IP un-registered-LAN10 > un-registered-LAN10: ICMP echo request, id 13469, seq 0, length 64
+13:05:22.313729 IP un-registered-LAN10 > un-registered-LAN10: ICMP echo reply, id 13359, seq 0, length 64
+\end{verbatim}
+
+\section{Konfiguracja mostka}
+Ćwiczenie polegało na konfiguracji mostka (bridge) i uruchomieniu protokołu STP (Spanning Tree Protocol).
+
+
+
+Pomiędzy maszynami k7 i k8 utworzyliśmy połączenie typu adhoc.
+\begin{verbatim}
+k7% sudo ifconfig wlan create wlandev rum0 wlanmode adhoc ssid 'K7_K8'
+k7% sudo ifconfig wlan0 inet 10.17.17.1/24 up
+\end{verbatim}
+\begin{verbatim}
+k8% sudo ifconfig wlan create wlandev ural0 wlanmode adhoc ssid 'K7_K8'
+k8% sudo ifconfig wlan0 inet 10.17.17.2/24 up
+\end{verbatim}
+
+Utworzenie mostka i właczenie STP:
+\begin{verbatim}
+k7% sudo ifconfig bridge create
+k7% sudo ifconfig bridge0 addm sk0 addm wlan0
+k7% sudo ifconfig bridge0 stp sk0 stp wlan0
+k7% sudo ifconfig bridge0 up
+\end{verbatim}
+
+Następnie sprawdziliśmy ustawienia mostka:
+
+\begin{verbatim}
+k7% ifconfig bridge0
+bridge0: flags=8802<BROADCAST,SIMPLEX,MULTICAST> metric 0 mtu 1500
+	ether 02:7d:1d:ad:cc:00
+	id 00:0f:cb:ff:13:a7 priority 32768 hellotime 2 fwddelay 15
+	maxage 20 holdcnt 6 proto rstp maxaddr 2000 timeout 1200
+	root id 00:14:1c:ad:7b:00 priority 16388 ifcost 220000 port 1
+	member: wlan0 flags=147<LEARNING,DISCOVER,STP,AUTOEDGE,AUTOPTP>
+	        ifmaxaddr 0 port 5 priority 128 path cost 370370 proto rstp
+	        role designated state discarding
+	member: vr0 flags=1c7<LEARNING,DISCOVER,STP,AUTOEDGE,PTP,AUTOPTP>
+	        ifmaxaddr 0 port 1 priority 128 path cost 200000 proto rstp
+	        role root state discarding
+\end{verbatim}
+
+Sprawdziliśmy działanie mostka za pomocą tcpdump.
+
+\begin{verbatim}
+k7% sudo tcpdump -i wlan0
+22:38:12.776351 STP 802.1w, Rapid STP, Flags [Learn, Forward], bridge-id 8000.K7-W.8007, length 36
+22:38:13.423461 ARP, Request who-has 192.168.2.70 tell 192.168.2.70, length 46
+
+k8% sudo tcpdump -i wlan0
+22:42:23.449938 ARP, Request who-has 192.168.2.70 tell 192.168.2.70, length 46
+22:42:23.502402 IP 10.146.5.8.netbios-ns > 10.146.255.255.netbios-ns: NBT UDP PACKET(137): QUERY; REQUEST; BROADCAST
+\end{verbatim}
+
+
+\section{Podsumowanie}
+\subsection{Podsumowanie ARP}
+Ćwiczenie polegało na diagnostyce protokołu ARP. Protokół ARP jest 
+używany do tłumaczenia adresów internetowych na
+adresy sprzętowe używane przez sieci lokalne. ARP może pracować z tymi 
+rodzajami sieci, które posiadają mechanizm rozgłaszania.
+Zasada działania ARP polega na wymianie komunikatów żądanie - odpowiedź. 
+Węzeł szukający adresu sprzętowego związanego
+z określonym adresem IP rozgłasza pakiet "Żądanie ARP". każdy węzeł 
+dołączony do sieci odbiera taki komunikat i jeśli rozpozna,
+że szukany jest jego adres IP - zapisuje w pamięci adres sprzętowy i IP 
+nadawcy i wysyła pakiet "Odpowiedź ARP".
+
+
+
+\subsection{Podsumewanie PPP RS-232}
+PPP (Point to Point Protocol) to protokół warstwy łącza. Pozwala na ustanowienie bezpośredniego połączenia między węzłami sieci komputerowej. PPP jest często wykorzystywany przez dostawców usługi internetowej do zapewniania uwierzytelniania.
+
+\subsection{Podsumowanie mostek}
+Mostek pracuje na poziomie warstwy łącza danych. Przekazuje pakiety wykorzystując adresy MAC. W tym celu wykorzystuje tablicę mostowania, w której o segmentach sieci skojarzonych z adresami MAC. W celu znalezienia adresów MAC, które nie znajdują się w tablicy forwardingu, mostek zalewa sieć przekazując pakiet na wszystki porty z wyjątkiem źródłowego.
+
+STP (Spanning Tree Protocol) to protokół warstwy łącza danych. Pozwala on na wykrywanie i blokowanie pętli w sieci oraz ustalanie zapasowych łącz. Obecnie dominuje wstecznie zgodna wersja protokołu STP - RSTP (Rapid Spanning Tree Protocol). Charakteryzuje się ona szybszym wykrywaniem pętli i uruchamianiem zapasowych łacz.
+
+
+\end{document}

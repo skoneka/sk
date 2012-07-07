@@ -1,0 +1,185 @@
+\documentclass[a4paper,11pt,notitlepage]{article}
+\usepackage{polski}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{graphicx}
+
+\geometry{verbose,a4paper,tmargin=1cm,bmargin=2cm,lmargin=2cm,rmargin=2cm}
+
+\title{\textbf{Laboratorium sieci komputerowych\\Zajęcia wprowadzające}}
+\author{Artur Skonecki\\Łukasz Załęski\\gr. 3}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+\noindent
+\large
+Podczas zajęć wprowadzających zapoznaliśmy się ze sprzętem oraz technologiami stosowanymi w labolatorium w sali SK103. W trakcie zajęć zostały również przedstawione polecenia umożliwiające i ułatwiające pracę w labolatorium.
+\end{abstract}
+
+
+
+\section{Schemat}
+\begin{verbatim}
+
+
+   ____                                           ______
+  |    | .187:x11                             .3 |      |
+  | k7 |-----------------------------------------| volt |
+  |____|            194.29.146.0/24              |______|
+
+
+\end{verbatim}
+
+
+\section{Uruchomienie klientów X na zdalnej maszynie.}
+
+
+\subsection{Konfiguracja}
+Po uruchomieniu maszyny \texttt{k7} i zalogowaniu się należało zamontować ramdysk jako system plików w katalogu domowym:
+\begin{verbatim}
+k6% home -r
+Filesystem    Size    Used   Avail Capacity  Mounted on
+/dev/md1       18M    8.0k     17M     0%    /home/stud/skonecka
+\end{verbatim}
+Teraz można było uruchomić X-serwer:
+\begin{verbatim}
+k7% startx
+\end{verbatim}
+\subsubsection{xauth}
+Podczas uruchamiania środowiska graficznego w katalogu domowym powstał plik \texttt{.Xauthority} zawierający klucze autoryzujące dostęp do serwera.
+\begin{verbatim}
+k7% xauth list
+k7.iem.pw.edu.pl/unix:0  MIT-MAGIC-COOKIE-1  7ab117fec480d35cf04795ba3a368a84
+k7.iem.pw.edu.pl:0       MIT-MAGIC-COOKIE-1  7ab117fec480d35cf04795ba3a368a84
+\end{verbatim}
+Następnie wyeksportowaliśmy klucz do maszyny, na której miały być uruchamiane aplikacje klienckie X. Do tego celu wykorzystano skrypt \texttt{xauth-export}:
+\begin{verbatim}
+k7% xauth-export volt
+przenosimy: k7.iem.pw.edu.pl:0
+Password:
+xauth:  creating new authority file /home/stud/skonecka/.Xauthority
+-e na maszynie volt wykonaj polecenie:
+export DISPLAY=k7.iem.pw.edu.pl:0
+\end{verbatim}
+Kolejnym krokiem było zalogowanie się na maszynę \texttt{volt} i odpowiednie ustawienie zmiennej środowiskowej \texttt{\$DISPLAY}:
+\begin{verbatim}
+k7% ssh volt
+Password:
+volt% export DISPLAY="k7.iem.pw.edu.pl:0"
+\end{verbatim}
+\subsubsection{xhost}
+Alternatywą dla kluczy autoryzująych jest program xhost, który pozwala na kontrolę dostępu do serwera X poprzez nazwy hostów.
+\begin{itemize}
+\item Umożliwia wszystkim klientom z maszyny łączenie się z serwerem X
+\begin{verbatim}
+xhost +localhost
+\end{verbatim}
+\item Umożliwia wszystkim klientom z serwera volt łączenie się z serwerem X
+\begin{verbatim}
+xhost +volt
+\end{verbatim}
+\end{itemize}
+Autoryzacja na poziomie hostów nadaje się jedynie do systemów z jednym użytkownikiem.
+
+
+\subsection{Testy}
+Sprawdzenie poprawności działania polegało na uruchomieniu dowolnego klienta korzystającej z X-serwera, np. \texttt{xterm}:
+\begin{verbatim}
+volt% xterm
+\end{verbatim}
+\section{Generowanie i instalacja kluczy ssh}
+Poprzez wykorzystanie kryptografii asymetrycznej możliwe jest logowanie przez ssh bez podawania hasła. Pierwszym krokiem jest wygenerowanie pary kluczy prywatnego i publicznego:
+\begin{verbatim}
+volt% ssh-keygen -t rsa
+\end{verbatim}
+Po wykonaniu polecenia zostana wygenerowane 2 pliki
+\begin{verbatim}
+Zawierający klucz publiczny
+$HOME/.ssh/id_rsa.pub
+Oraz prywatny
+$HOME/.ssh/id_rs
+\end{verbatim}
+N
+Następnie należy dodać klucz publiczny do pliku \$HOME/.ssh/authorized\_keys na maszynie na którą będzie wykonywane logowanie:
+\begin{verbatim}
+volt% ssh-copy-id -i HOME/.ssh/id_rsa.pub k7
+Password:
+Now try logging into the machine, with "ssh 'k7'", and check in:
+
+  ~/.ssh/authorized_keys
+
+  to make sure we haven't added extra keys that you weren't expecting.
+\end{verbatim}
+Po wykonaniu tej instrukcji, powinno być możliwe wykonanie logowania z maszyny volt bez konieczności podawania hasła do konta na maszynie k7.
+
+\section{Serwer VNC}
+vncserver  jest  używany  do uruchomienia pulpitu VNC (Virtual Network 
+Computing).
+\subsection{Ustawienia startowe i u ruchomienie serwera VNC}
+W pliku
+\begin{verbatim}
+$HOME/.vnc/xstartup
+\end{verbatim}
+Jest określone które aplikacje X zostaną uruchomione, przy starce vnc 
+servera.
+Np. Można zmienić managera okienek.
+Server vnc uruchamiamy za pomocą polecenia:
+\begin{verbatim}
+vncserver
+\end{verbatim}
+Jeśli wszystko przebiegło pomyślnie, dostajemy komuniat o podobnej treści:
+\begin{verbatim}
+New '[host]:[id] ([user])' desktop is [host]:[id]
+\end{verbatim}
+Gdzie:
+\begin{itemize}
+\item [host] - nazwa hosta
+\item [id] - id pulpitu
+\item [user] - nazwa usera( domyślnie tego user, który włączył vnc server)
+\end{itemize}
+Każdy user może włączać wiele serwerów vnc, do połączenia się z różnymi 
+vnc służy [id]\newline
+\subsection{Nawiązanie połączenia z vncserver}
+\subsubsection{Windows}
+Aby połączyć się z serverem vnc, wystarczy pobrać, zainstalować i 
+uruchomić klienta vnc np. TigerVNC Viewer. Obsługa takich programów 
+zwykle ogranicza się do wpisania w pole server: [host]:[id], oraz 
+podania nazwy użytkownika oraz hasła i wciśnięciu przycisku connect
+\subsection{Linux}
+Uruchomienie przeglądarki vnc w linuxie odbywa się za pomoca polecenia:
+\begin{verbatim}
+vncviewer [host]:[id]
+\end{verbatim}
+Po uruchomieniu powyższego polecenia, otworzy się okno przeglądarki z 
+dialogiem do wpisania usera i hasła
+\subsection{Zmiana hasła dla vnc}
+\begin{verbatim}
+vncpasswd
+\end{verbatim}
+Plecenie wypytuje nas o nowe hasło
+
+\pagebreak
+
+\section{Wnioski}
+X serwer to aplikacja, do której zadań należy udostępnianie klawiatury, myszy i wyświetlacza pracującego w trybie graficznym. Aplikacje komunikujące się z X serwerem to X klienty. Interakcja X klientów z serwerem X przebiega za pomocą sieciowo transparentnego protokołu komunikacyjnego, dzięki czemu X klienty mogą pracować na zupełnie innych maszynach. Rozszerzenie MIT-SHM dla systemu okien X dodaje możliwość komunikacji między serwerem a klientami przez pamięć współdzieloną, co znacznie poprawia wydajność.
+
+
+Poznane komendy.
+\begin{itemize}
+    \item killall
+    \item rdesktop, xtsc
+    \item lpr, a2ps
+    \item ssh, ssh-keygen, ssh-copy-id
+    \item home
+    \item xauth, xauth-export
+    \item startx
+    \item xhost
+    \item scp
+    \item vncserver, vncviewer
+    \item script
+\end{itemize}
+\end{document}

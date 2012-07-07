@@ -1,0 +1,163 @@
+
+\documentclass[a4paper,11pt]{article}
+\usepackage{polski}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{geometry}
+
+\geometry{verbose,a4paper,tmargin=1cm,bmargin=2cm,lmargin=2cm,rmargin=2cm}
+
+\title{\textbf{Laboratorium sieci komputerowych\\Network File System\\File Transfer Protocol}}
+\author{Artur Skonecki\\Łukasz Załęski}
+
+\begin{document}
+\maketitle
+\section{NFS}
+\subsection{Schemat}
+\begin{verbatim}
+   ____                                           ____
+  |    |  em3 .4                         .3 em3  |    |
+  | mfs|-----------------------------------------| vf9|
+  |____|             192.168.56.0/24             |____|
+(serwer) (VirtualBox host-only adapter vboxnet0) (klient)
+
+\end{verbatim}
+\subsection{Konfiguracja serwera NFS}
+
+Podczas startu systemu:
+
+\begin{verbatim}
+cat >> /etc/rc.conf << EOF
+rpcbind_enable="YES"
+nfs_server_enable="YES"
+mountd_enable="YES"
+mountd_flags="-r"
+EOF
+\end{verbatim}
+
+Manualny start demonów:
+
+\begin{verbatim}
+server% rpcbind
+server% nfsd -u -t -n 4
+server% mountd -r
+\end{verbatim}
+
+\begin{enumerate}
+\item rpcbind - pozwala klientom nfs na odkrywanie, które porty używa NFS serwer
+\item mountd - demon NFS, który wykonuje polecenia nfsd
+\item nfsd - demon NFS, który udostępnia usługia klientom NFS
+\end{enumerate}
+
+
+\begin{verbatim}
+cat >> /etc/exports << EOF
+/usr/share/man -ro
+/home -alldirs 192.168.56.3
+EOF
+\end{verbatim}
+Po dokonaniu modyfikacji w pliku /etc/exports należy zmusić demon mountd do ponownego wczytania konfiguracji. W tym celu należy wysłać procesowi mountd sygnał HUP:
+\begin{verbatim}
+/etc/rc.d/mountd reload
+\end{verbatim}
+
+Pokaż listę udostępnianych zasobów:
+
+\begin{verbatim}
+server% showmount -e
+Exports list on localhost:
+/home                              192.168.56.3
+/usr/share/man                     Everyone
+\end{verbatim}
+
+\subsection{Konfiguracja klienta NFS}
+Z lini komend:
+\begin{verbatim}
+mount 192.168.56.4:/usr/share/man /mnt/nfs0
+mount 192.168.56.4:/home /mnt/nfs1
+\end{verbatim}
+Podczas startu systemu:
+\begin{verbatim}
+cat >> /etc/fstab << EOF
+192.168.56.4:/usr/share/man	/mnt/nfs0	nfs	ro	0	0
+192.168.56.4:/home	/mnt/nfs1	nfs	ro	0	0
+EOF
+\end{verbatim}
+
+\section{FTP}
+\subsection{Schemat}
+\begin{verbatim}
+   ____                                           ____
+  |    |  em3 .4                         .3 em3  |    |
+  | mfs|-----------------------------------------| vf9|
+  |____|             192.168.56.0/24             |____|
+(serwer) (VirtualBox host-only adapter vboxnet0) (klient)
+
+\end{verbatim}
+\subsection{Konfiguracja usługi FTP}
+
+\begin{itemize}
+\item /etc/ftphosts - pozwala na wyspecyfikowanie wirtualnych hostów ftp
+\item /etc/ftpusers - lista użytkowników którzy nie mogą korzystać z FTP
+/var/log/xferlog - domyślna lokalizacja logów ftpd w konfiguracji syslogd
+\item /etc/ftpwelcome /etc/ftpmotd - drukowane po zalogowaniu użytkownika
+\end{itemize}
+
+Uruchomianie za pomocą demona inetd:
+
+\begin{verbatim}
+cat >> /etc/inetd.conf << EOF
+ftp     stream  tcp     nowait  root    /usr/libexec/ftpd       ftpd -l
+EOF
+/etc/rc.d/inetd restart
+\end{verbatim}
+
+
+Podczas startu systemu. Demon ftpd bezpośrednio odpowiada na połączenia (wydajniesze niż start za pomocą inetd).
+
+\begin{verbatim}
+cat >> /etc/rc.conf << EOF
+ftpd_enable="YES"
+EOF
+\end{verbatim}
+
+Manualny start:
+
+\begin{verbatim}
+server% /etc/rc.d/ftpd start
+\end{verbatim}
+
+\subsection{Anonimowe logowanie}
+W celu umożliwienia anonimowego logowania należy utworzyć użytkownika "ftp" bez ustawionego hasła. Wtedy możliwe będzie logowanie jako "anonymous" lub "ftp".
+
+\subsection{Przechwycenie hasła}
+W przypadku protokołu ftp przesyłane dane nie są szyfrowane. Dotyczy to także haseł.
+
+\begin{verbatim}
+client% ftp t1@192.168.56.4
+Connected to 192.168.56.4.
+220 test.example.com FTP server (Version 6.00LS) ready.
+331 Password required for t1.
+Password:
+
+server% tcpdump -i em3 -s 100 -X port ftp
+10:48:18.120259 IP 192.168.56.3.46253 > 192.168.56.4.ftp: Flags [P.], seq 10:28, ack 73, win 1040, options [nop,nop,TS val 1303188 ecr 2071881433], length 18
+        0x0000:  4510 0046 0318 4000 4006 4632 c0a8 3803  E..F..@.@.F2..8.
+        0x0010:  c0a8 3804 b4ad 0015 299f 3ecf 2c2c 41b8  ..8.....).>.,,A.
+        0x0020:  8018 0410 48ea 0000 0101 080a 0013 e294  ....H...........
+        0x0030:  7b7e 66d9 5041 5353 2074 6f6a 6573 7468  {~f.PASS.tojesth
+        0x0040:  6173 6c6f 0d0a                           aslo..
+\end{verbatim}
+
+\section{Podsumowanie}
+
+\subsection{Podsumowanie NFS}
+NFS (Network File System) to sieciowy system plików, opracowany przez firmę Sun Microsystems. NFS jest najpopularniejszym rozwiązaniem na systemach UNIX-owych. NFSv3 używa TCP w warstwie transportowej. Korzyści z zastosowania NFS to obniżenie kosztów administracji, łatwienie dostępu do danych i efektywniejsze wykorzystanie zasobów.
+
+
+\subsection{Podsumowanie FTP}
+FTP to standardowy protokół do wymiany plików pomiędzy hostami. Standardowy protokół FTP nie jest bezpieczny - jest wrażliwy na wiele ataków. Ponadto, ruch nie jest szyfrowany. FTP pozwala na transfer plików w trybie aktywnym oraz pasywnym, który pozwala na korzystanie z usług FTP klientom za zaporą lub NAT'em.
+
+\end{document}

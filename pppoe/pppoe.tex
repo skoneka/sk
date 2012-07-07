@@ -1,0 +1,256 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage{polski}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{geometry}
+
+\geometry{verbose,a4paper,tmargin=1cm,bmargin=2cm,lmargin=2cm,rmargin=2cm}
+
+\title{\textbf{Laboratorium sieci komputerowych\\PPPoE}}
+\author{Artur Skonecki\\Łukasz Załęski}
+
+\begin{document}
+\maketitle
+
+\section*{PPPoE - Point to Point Protocol over Ethernet}
+
+\subsection*{Schematy}
+Połączenie PPPoE zostało przetestowane za pomocą wirtualnych maszyn oraz maszyn znajdujących się w labolatorium SK103.
+
+
+\begin{verbatim}
+   ____                                           ____
+  |    |-|tun0 10.0.0.1         10.0.1.234 tun0|-|    |
+  |    | |                                     | |    |
+  |    | |em3 .4                         .3 em3| |    |
+  | mfs|-----------------------------------------| vf9|
+  |____|             192.168.56.0/24             |____|
+(serwer) (VirtualBox host-only adapter vboxnet0) (klient)
+
+\end{verbatim}
+
+\begin{verbatim}
+                             194.29.146.0/24
+     _________________________________________________________________
+     |sk0 .247                            sk0 .248 |         bge1 .3 |
+   __|_                                           _|__               |
+  |    |-|tun0 10.0.0.1          10.0.4.40 tun0|-|    |           ___|__
+  |    | |                                     | |    |          |      |
+  |    | |em0 .226.222             .226.175 em0| |    |          | volt |
+  | k1 |-----------------------------------------| k2 |          |______|
+  |____|             10.146.0.0/16               |____|
+(serwer)                                         (klient)
+
+
+\end{verbatim}
+
+\subsection*{Konfiguracja serwera PPPoE}
+
+\begin{verbatim}
+cat > /etc/ppp/ppp.conf << EOF
+# http://www.freebsdonline.com/content/view/29/45/
+# ppp.conf: PPPoE server configuration
+default:
+ set log +debug
+ set device PPPoE:em3
+ enable pap                             #turn on chap and pap accounting
+ enable chap
+ allow mode direct                      #turn on ppp bridging
+ enable proxy                           #turn on ppp proxyarping (redundant of a
+ disable ipv6cp                         #we don't use ipv6, don't want the errors
+ set mru 1492                           #set mru below 1500 (PPPoE MTU issue)
+ set mtu 1492                           #set mtu below 1500 (PPPoE MTU issue)
+ set ifaddr 10.0.0.1 10.0.1.1-10.0.5.254
+ set speed sync
+ set timeout 0
+ enable lqr
+ accept dns
+EOF
+
+cat > /etc/ppp/ppp.secret << EOF
+username	password
+EOF
+
+cat >> /etc/rc.conf << EOF
+pppoed_enable="YES"
+pppoed_flags='-Fd -P /var/run/pppoed.pid -a "server" -l "default"'
+pppoed_interface="em3"
+EOF
+\end{verbatim}
+
+
+
+\subsection*{Konfiguracja klienta PPPoE}
+\begin{verbatim}
+cat > /etc/ppp/ppp.conf << EOF
+# http://renaud.waldura.com/doc/freebsd/pppoe/
+# ppp.conf: PPPoE client configuration
+default:
+ set device PPPoE:em3
+ set speed sync
+ set mru 1492 
+ set mtu 1492
+ set ctsrts off
+ # monitor line quality 
+ enable lqr
+ set log +debug
+ # insert default route upon connection
+ add default HISADDR
+ enable dns
+
+papchap:
+ set authname username
+ set authkey password
+EOF
+\end{verbatim}
+
+\subsection*{Logowanie na serwerze}
+\begin{verbatim}
+cat >> /etc/syslog.conf << EOF
+!ppp
+*.*		/var/log/ppp.log
+!pppoed
+*.*		/var/log/pppoed.log
+EOF
+\end{verbatim}
+
+\subsection*{Logowanie na kliencie}
+\begin{verbatim}
+cat >> /etc/syslog.conf << EOF
+!ppp
+*.*		/var/log/ppp.log
+EOF
+\end{verbatim}
+
+\subsection*{Połączenie}
+
+Przed połączeniem ppp konieczne było ustanowienie adresu IP na interfejsach ethernetowskich.
+\begin{verbatim}
+server% dhclient em3
+client% dhclient em3
+\end{verbatim}
+
+\begin{verbatim}
+server% /etc/rc.d/pppoed start
+Starting pppoed
+Sending NGM_LISTHOOKS to em3:
+Got reply from id [4]: Type ether with 1 hooks
+  Got [4]:orphans -> [6]:ethernet
+Sending PPPOE_LISTEN to .:pppoe-1771, provider *
+pppoed[1771]: Listening as provider *
+pppoed[1771]: Got 60 bytes of data: ffffffffffff0800276e3787886311090000000c010300040061f1c10101000000000000000000000000000000000000000000000000000000000000
+pppoed[1773]: Creating a new socket node
+pppoed[1771]: Listening as provider *
+pppoed[1773]: Sending CONNECT from .:exec-1773 -> em3:orphans.exec-1773
+pppoed[1773]: Sending NGM_SOCK_CMD_NOLINGER to socket
+pppoed[1773]: Offering to .:exec-1773 as access concentrator "server"
+pppoed[1773]: adding to .:exec-1773 as offered service "server"
+pppoed[1773]: Sending original request to .:exec-1773 (60 bytes)
+pppoed[1773]: Waiting for a SUCCESS reply .:exec-1773
+pppoed[1773]: Received NGM_PPPOE_SESSIONID (hook "")
+pppoed[1773]: Received NGM_PPPOE_SUCCESS (hook "exec-1773")
+pppoed[1773]: Executing: exec /usr/sbin/ppp -direct "default"
+\end{verbatim}
+\begin{verbatim}
+client% ppp papchap
+Working in interactive mode
+Using interface: tun0
+ppp ON Vfreebsd9> dial
+ppp ON Vfreebsd9>
+Ppp ON Vfreebsd9>
+PPp ON Vfreebsd9> Warning: 0.0.0.0/0: Change route failed: errno: No such process
+PPP ON Vfreebsd9> Warning: 0.0.0.0/0: Change route failed: errno: No such process
+ppp ON Vfreebsd9>
+\end{verbatim}
+
+
+Zmieniająca się wielkość liter w ciagu znaków ``ppp'', powiadamia o powodzeniu poszególnych faz ustanawiania połączenia:
+\begin{itemize}
+\item Ppp - powiodła się faza inicjalizacji LCP (Link-Control Protocol)
+\item PPp - udane uwierzytelnianie
+\item PPP - został przyporządkowany adres IP
+\end{itemize}
+
+
+\begin{verbatim}
+server% ifconfig tun0
+tun0: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> metric 0 mtu 1492
+        options=80000<LINKSTATE>
+        inet 10.0.0.1 --> 10.0.1.234 netmask 0xffffffff
+        nd6 options=21<PERFORMNUD,AUTO_LINKLOCAL>
+        Opened by PID 1773
+\end{verbatim}
+
+\begin{verbatim}
+client% ifconfig tun0
+tun0: flags=8050<POINTOPOINT,RUNNING,MULTICAST> metric 0 mtu 1500
+        options=80000<LINKSTATE>
+        inet 10.0.1.234 --> 10.0.0.1 netmask 0xffffffff
+        nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
+        Opened by PID 2449
+\end{verbatim}
+
+Log tcpdump zawierający odpowiedź na pakiet ICMP zarejestrowaną po wykonaniu komendy "ping 10.0.0.1" na kliencie.
+\begin{verbatim}
+client% tcpdump -i em3
+23:17:10.849905 PPPoE PADI [Host-Uniq 0x0061F1C1] [Service-Name]
+23:17:10.868032 PPPoE PADO [AC-Name ""server""] [Service-Name] [Service-Name "*"] [Host-Uniq 0x0061F1C1] [AC-Cookie 0x40B2F1C3]
+23:17:10.868422 PPPoE PADR [Host-Uniq 0x0061F1C1] [AC-Cookie 0x40B2F1C3] [AC-Name ""server""] [Service-Name]
+23:17:10.869526 PPPoE PADS [ses 0x1] [AC-Name ""server""] [Service-Name] [Host-Uniq 0x0061F1C1] [AC-Cookie 0x40B2F1C3]
+23:17:12.288443 PPPoE  [ses 0x1] LCP, Conf-Request (0x01), id 1, length 29
+        encoded length 27 (=Option(s) length 23)
+...<snip>...
+23:17:32.910336 PPPoE  [ses 0x1] compressed PPP data
+23:17:42.628901 PPPoE  [ses 0x1] LQM
+        0x0000:  6890 a1d4 0000 0001 0000 0003 0000 006a
+        0x0010:  0000 0001 0000 0003 0000 0000 0000 0000
+        0x0020:  0000 006a 0000 0002 0000 000d 0000 014f
+...<snip>...
+23:20:13.171230 PPPoE  [ses 0x1] compressed PPP data
+23:20:13.182320 PPPoE  [ses 0x1] IP (tos 0x0, ttl 64, id 179, offset 0, flags [none], proto ICMP (1), length 84)
+    10.0.0.1 > 10.0.1.234: ICMP echo reply, id 60937, seq 0, length 64
+\end{verbatim}
+
+\begin{verbatim}
+client% ping 10.0.0.1
+64 bytes from 10.0.0.1: icmp_seq=0 ttl=64 time=35.000 ms
+64 bytes from 10.0.0.1: icmp_seq=1 ttl=64 time=19.487 ms
+\end{verbatim}
+
+\begin{verbatim}
+server% ping 10.0.2.234
+64 bytes from 10.0.2.234: icmp_seq=0 ttl=64 time=10.966 ms
+64 bytes from 10.0.2.234: icmp_seq=1 ttl=64 time=20.986 ms
+\end{verbatim}
+
+
+\subsection*{Automatyczna konfiguracja podczas startu systemu}
+
+\subsubsection*{Serwer}
+\begin{verbatim}
+cat >> /etc/rc.conf << EOF
+ifconfig_em3="DHCP"
+pppoed_enable="YES"
+pppoed_flags='-P /var/run/pppoed.pid -a "server" -l "default"'
+pppoed_interface="em3"
+EOF
+\end{verbatim}
+
+\subsubsection*{Klient}
+
+\begin{verbatim}
+cat >> /etc/rc.conf << EOF
+ifconfig_em3="DHCP"
+ppp_enable="YES"
+ppp_mode="background"
+ppp_profile="papchap"
+EOF
+\end{verbatim}
+\subsection*{Podsumowanie}
+PPPoE jest najczęściej wykorzystywany w technologiach DSL. PPPoE poprzez enkapsulację pakietów działa jako usługa uwierzytelniania, a także umożliwia szyfrowanie. Wadą PPPoE jest problem z MTU (Maximum Transmission Unit). Źle ustawiony MTU może powodować kiepską transmisję danych. Ponadto, enkapsulacja pakietów skutkuje dużym opóżnieniem, co jest widoczne podczas wysyłania pakietów ICMP.
+
+\end{document}
+
+
